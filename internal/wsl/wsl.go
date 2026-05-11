@@ -44,14 +44,20 @@ func ToWindowsLocalPath(path string) string {
 }
 
 // WindowsProfilesBaseDir returns the Windows user home as a WSL mount path
-// (e.g. C:\Users\foo → /mnt/c/Users/foo), or "" if USERPROFILE is not set.
+// (e.g. C:\Users\foo → /mnt/c/Users/foo), or "" on failure.
 // Use this to store Chrome profiles on the Windows filesystem so Chrome.exe
 // gets a native drive-letter path instead of a UNC \\wsl.localhost\ share.
 func WindowsProfilesBaseDir() string {
-	userProfile := os.Getenv("USERPROFILE")
-	if userProfile == "" {
+	// Try env var first (only set when WSLENV forwards USERPROFILE)
+	if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
+		return winPathToWSL(userProfile)
+	}
+	// Fall back to cmd.exe — always available in WSL2
+	out, err := exec.Command("cmd.exe", "/c", "echo %USERPROFILE%").Output()
+	if err != nil {
 		return ""
 	}
+	userProfile := strings.TrimSpace(string(out))
 	return winPathToWSL(userProfile)
 }
 

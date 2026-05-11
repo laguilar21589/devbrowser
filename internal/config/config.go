@@ -2,8 +2,11 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/laguilar-io/devbrowser/internal/wsl"
 )
 
 type Config struct {
@@ -39,6 +42,16 @@ func Load() (Config, error) {
 	}
 
 	cfg.ProfilesDir = ExpandHome(cfg.ProfilesDir)
+
+	// In WSL, profiles must live on the Windows filesystem so Chrome.exe receives
+	// a native drive-letter path instead of a UNC \\wsl.localhost\ share.
+	// Override whatever is in config (including the default Linux path).
+	if wsl.IsWSL() {
+		if winBase := wsl.WindowsProfilesBaseDir(); winBase != "" {
+			cfg.ProfilesDir = filepath.Join(winBase, ".devbrowser", "profiles")
+		}
+	}
+
 	return cfg, nil
 }
 
