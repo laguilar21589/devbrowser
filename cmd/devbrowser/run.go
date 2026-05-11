@@ -293,10 +293,25 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 		select {
 		case <-sigCh:
-			fmt.Println("\n🔴  Interrupted — stopping dev server...")
 			_ = browserCmd.Process.Kill()
-			cleanup()
-			return nil
+			action := promptAfterChromeClosed()
+			switch action {
+			case "r":
+				clearScreen()
+				printSessionInfo(info)
+				fmt.Printf("🔄  Relaunching Chrome at %s...\n\n", url)
+				continue
+			case "k":
+				fmt.Println("🔴  Stopping dev server...")
+				cleanup()
+				return nil
+			default: // "q"
+				fmt.Printf("💤  Dev server kept running on port %d\n", p)
+				if len(args) == 1 {
+					fmt.Printf("    Re-attach: devbrowser %s\n", args[0])
+				}
+				return nil
+			}
 
 		case <-serverExitCh:
 			fmt.Println("\n🔴  Dev server exited — closing browser...")
