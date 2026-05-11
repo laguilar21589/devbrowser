@@ -8,7 +8,9 @@ import (
 )
 
 // localEnvFiles are the gitignored env files Next.js (and others) use locally.
+// .env is included because many projects use it directly (gitignored via .gitignore).
 var localEnvFiles = []string{
+	".env",
 	".env.local",
 	".env.development.local",
 	".env.test.local",
