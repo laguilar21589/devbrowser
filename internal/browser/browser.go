@@ -5,6 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/laguilar-io/devbrowser/internal/wsl"
 )
 
 // Find returns the path to Chrome/Chromium, using override if set.
@@ -38,8 +41,15 @@ func Launch(binary, profileDir, url string) (*exec.Cmd, error) {
 		_ = os.WriteFile(firstRun, []byte{}, 0644)
 	}
 
+	// In WSL, chrome.exe is a Windows process and expects a Windows-style path
+	// for --user-data-dir. Convert the Linux path to a UNC path via wslpath.
+	userDataDir := profileDir
+	if wsl.IsWSL() && strings.HasSuffix(strings.ToLower(binary), ".exe") {
+		userDataDir = wsl.ToWindowsPath(profileDir)
+	}
+
 	cmd := exec.Command(binary,
-		"--user-data-dir="+profileDir,
+		"--user-data-dir="+userDataDir,
 		"--disable-extensions",
 		"--auto-open-devtools-for-tabs",
 		"--no-first-run",
