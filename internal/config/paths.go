@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/laguilar-io/devbrowser/internal/wsl"
 )
 
 func BaseDir() (string, error) {
@@ -19,6 +21,18 @@ func BaseDir() (string, error) {
 }
 
 func ProfilesDir() (string, error) {
+	// In WSL, store profiles on the Windows filesystem so Chrome.exe receives a
+	// native drive-letter path (C:\...) instead of a UNC \\wsl.localhost\ share,
+	// which Chrome refuses to use as --user-data-dir.
+	if wsl.IsWSL() {
+		if winBase := wsl.WindowsProfilesBaseDir(); winBase != "" {
+			dir := filepath.Join(winBase, ".devbrowser", "profiles")
+			if err := os.MkdirAll(dir, 0755); err == nil {
+				return dir, nil
+			}
+		}
+	}
+
 	base, err := BaseDir()
 	if err != nil {
 		return "", err

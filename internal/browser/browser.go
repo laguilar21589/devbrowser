@@ -41,11 +41,16 @@ func Launch(binary, profileDir, url string) (*exec.Cmd, error) {
 		_ = os.WriteFile(firstRun, []byte{}, 0644)
 	}
 
-	// In WSL, chrome.exe is a Windows process and expects a Windows-style path
-	// for --user-data-dir. Convert the Linux path to a UNC path via wslpath.
+	// In WSL, chrome.exe expects a Windows-style path for --user-data-dir.
+	// Prefer a native drive-letter path (C:\...) over a UNC \\wsl.localhost\
+	// share — Chrome refuses UNC paths as profile directories.
 	userDataDir := profileDir
 	if wsl.IsWSL() && strings.HasSuffix(strings.ToLower(binary), ".exe") {
-		userDataDir = wsl.ToWindowsPath(profileDir)
+		if winPath := wsl.ToWindowsLocalPath(profileDir); winPath != "" {
+			userDataDir = winPath
+		} else {
+			userDataDir = wsl.ToWindowsPath(profileDir)
+		}
 	}
 
 	cmd := exec.Command(binary,
