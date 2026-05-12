@@ -68,3 +68,16 @@ func Launch(binary, profileDir, url string) (*exec.Cmd, error) {
 	}
 	return cmd, nil
 }
+
+// WaitForBrowserClose blocks until the browser window is closed.
+// In WSL with a Windows EXE the PID-based approach is unreliable (the WSL
+// interop stub exits when Chrome's launcher exits, not when the window closes),
+// so we fall back to polling Chrome processes by profile directory.
+func WaitForBrowserClose(pid int, binary, profileDir string) {
+	if wsl.IsWSL() && strings.HasSuffix(strings.ToLower(binary), ".exe") {
+		winProfileDir := wsl.ToWindowsLocalPath(profileDir)
+		WaitForCloseWSL(winProfileDir)
+		return
+	}
+	WaitForClose(pid)
+}

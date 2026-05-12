@@ -31,10 +31,27 @@ var (
 var stdinScanner = bufio.NewScanner(os.Stdin)
 
 func readLine() string {
-	if stdinScanner.Scan() {
-		return strings.TrimSpace(strings.ToLower(stdinScanner.Text()))
+	lineCh := make(chan string, 1)
+	go func() {
+		if stdinScanner.Scan() {
+			lineCh <- strings.TrimSpace(strings.ToLower(stdinScanner.Text()))
+		} else {
+			lineCh <- ""
+		}
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	select {
+	case line := <-lineCh:
+		return line
+	case <-sigCh:
+		fmt.Println()
+		os.Exit(0)
+		return ""
 	}
-	return ""
 }
 
 var runCmd = &cobra.Command{
@@ -284,7 +301,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 		browserDone := make(chan struct{}, 1)
 		go func() {
-			browser.WaitForClose(browserCmd.Process.Pid)
+			browser.WaitForBrowserClose(browserCmd.Process.Pid, chromeBin, profileDir)
 			browserDone <- struct{}{}
 		}()
 
@@ -370,7 +387,7 @@ func attachToSession(cfg config.Config, worktreeName string, p int, profileDir, 
 
 		browserDone := make(chan struct{}, 1)
 		go func() {
-			browser.WaitForClose(browserCmd.Process.Pid)
+			browser.WaitForBrowserClose(browserCmd.Process.Pid, chromeBin, profileDir)
 			browserDone <- struct{}{}
 		}()
 
@@ -379,9 +396,23 @@ func attachToSession(cfg config.Config, worktreeName string, p int, profileDir, 
 
 		select {
 		case <-sigCh:
-			fmt.Println("\n🔴  Interrupted.")
 			_ = browserCmd.Process.Kill()
-			return nil
+			action := promptAttachedChromeClosed()
+			switch action {
+			case "r":
+				continue
+			case "k":
+				fmt.Println("🔴  Stopping dev server...")
+				entry, _ := state.Get(worktreeName)
+				if entry != nil {
+					killGroupByPGID(entry.ServerPGID)
+					_ = state.Remove(worktreeName)
+				}
+				return nil
+			default: // "q"
+				fmt.Printf("💤  Detached. Server still on port %d\n", p)
+				return nil
+			}
 		case <-browserDone:
 			_ = browserCmd.Process.Kill()
 			action := promptAttachedChromeClosed()
@@ -455,7 +486,7 @@ func attachOnly(cfg config.Config, p int) error {
 
 		browserDone := make(chan struct{}, 1)
 		go func() {
-			browser.WaitForClose(browserCmd.Process.Pid)
+			browser.WaitForBrowserClose(browserCmd.Process.Pid, chromeBin, profileDir)
 			browserDone <- struct{}{}
 		}()
 
@@ -464,9 +495,18 @@ func attachOnly(cfg config.Config, p int) error {
 
 		select {
 		case <-sigCh:
-			fmt.Println("\n🔴  Interrupted.")
 			_ = browserCmd.Process.Kill()
-			return nil
+			action := promptAfterChromeClosed()
+			switch action {
+			case "r":
+				clearScreen()
+				printSessionInfo(info)
+				fmt.Printf("🔄  Relaunching Chrome at %s...\n\n", url)
+				continue
+			default:
+				fmt.Printf("💤  Detached from port %d\n", p)
+				return nil
+			}
 		case <-browserDone:
 			_ = browserCmd.Process.Kill()
 			action := promptAfterChromeClosed()
