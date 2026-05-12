@@ -15,11 +15,10 @@ import (
 // interop stub exits when Chrome's initial launcher exits, not when the user
 // closes the browser window.
 func WaitForCloseWSL(windowsProfileDir string) {
-	// Escape backslashes for PowerShell LIKE clause (\\ = literal \)
-	escaped := strings.ReplaceAll(windowsProfileDir, `\`, `\\`)
+	// PowerShell's -like operator treats \ as a literal character — no escaping needed.
 	script := fmt.Sprintf(
 		`(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*%s*' } | Measure-Object).Count`,
-		escaped,
+		windowsProfileDir,
 	)
 
 	poll := func() int {

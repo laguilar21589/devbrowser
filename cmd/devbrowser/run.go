@@ -188,7 +188,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 				d, _ := config.ProfilesDir()
 				return d
 			}(), worktreeName)
-			return attachToSession(cfg, worktreeName, existing.Port, existingProfileDir, existingURL)
+			return attachToSession(cfg, worktreeName, existing, existingProfileDir, existingURL)
 		}
 		// Stale entry — clean up and start fresh
 		fmt.Printf("  %s  stale session (PID %d dead) — starting fresh\n\n",
@@ -369,14 +369,21 @@ func isServerAlive(pid int) bool {
 }
 
 // attachToSession opens Chrome for an existing session using the correct profile.
-// It reads the state entry so it can offer [k]ill server option.
-func attachToSession(cfg config.Config, worktreeName string, p int, profileDir, url string) error {
+// existing is passed in so [k]ill works even if state.json is cleared externally.
+func attachToSession(cfg config.Config, worktreeName string, existing *state.Entry, profileDir, url string) error {
+	p := existing.Port
 	chromeBin, err := browser.Find(cfg.BrowserPath)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		return err
+	}
+
+	killServer := func() {
+		fmt.Println("🔴  Stopping dev server...")
+		killGroupByPGID(existing.ServerPGID)
+		_ = state.Remove(worktreeName)
 	}
 
 	for {
@@ -394,41 +401,27 @@ func attachToSession(cfg config.Config, worktreeName string, p int, profileDir, 
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
+		handleAction := func(action string) (done bool) {
+			switch action {
+			case "k":
+				killServer()
+				return true
+			case "q":
+				fmt.Printf("💤  Detached. Server still on port %d\n", p)
+				return true
+			}
+			return false // "r" — relaunch
+		}
+
 		select {
 		case <-sigCh:
 			_ = browserCmd.Process.Kill()
-			action := promptAttachedChromeClosed()
-			switch action {
-			case "r":
-				continue
-			case "k":
-				fmt.Println("🔴  Stopping dev server...")
-				entry, _ := state.Get(worktreeName)
-				if entry != nil {
-					killGroupByPGID(entry.ServerPGID)
-					_ = state.Remove(worktreeName)
-				}
-				return nil
-			default: // "q"
-				fmt.Printf("💤  Detached. Server still on port %d\n", p)
+			if handleAction(promptAttachedChromeClosed()) {
 				return nil
 			}
 		case <-browserDone:
 			_ = browserCmd.Process.Kill()
-			action := promptAttachedChromeClosed()
-			switch action {
-			case "r":
-				continue
-			case "k":
-				fmt.Println("🔴  Stopping dev server...")
-				entry, _ := state.Get(worktreeName)
-				if entry != nil {
-					killGroupByPGID(entry.ServerPGID)
-					_ = state.Remove(worktreeName)
-				}
-				return nil
-			default: // "q"
-				fmt.Printf("💤  Detached. Server still on port %d\n", p)
+			if handleAction(promptAttachedChromeClosed()) {
 				return nil
 			}
 		}
