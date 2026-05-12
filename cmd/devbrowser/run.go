@@ -361,12 +361,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func isServerAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	return syscall.Kill(pid, 0) == nil
-}
+func isServerAlive(pid int) bool { return isProcessAlive(pid) }
 
 // attachToSession opens Chrome for an existing session using the correct profile.
 // existing is passed in so [k]ill works even if state.json is cleared externally.

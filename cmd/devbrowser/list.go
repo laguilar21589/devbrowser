@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -50,13 +49,7 @@ var listCmd = &cobra.Command{
 	},
 }
 
-func isAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil
-}
+func isAlive(pid int) bool { return isProcessAlive(pid) }
 
 func humanAge(t time.Time) string {
 	d := time.Since(t)
